@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CadGIS - Système Cadastre Marocain</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #header {
+            background: linear-gradient(135deg, #E49112, #1B5B9A);
+            color: white; text-align: center; padding: 12px; font-weight: bold;
+            font-size: clamp(14px, 4vw, 22px); box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex; align-items: center; justify-content: space-between;
+            padding-right: 20px; padding-left: 20px;
+        }
+        
+        #header-logo { font-size: 24px; display: flex; align-items: center; }
+        #header-title { flex-grow: 1; text-align: center; }
+        
+        #map { width: 100%; height: calc(100% - 60px); margin-top: 60px; }
+        
+        #coords {
+            position: absolute; bottom: 10px; right: 10px;
+            padding: 8px 15px; background: rgba(255,255,255,0.95);
+            border: 2px solid #1B5B9A; border-radius: 20px; font-size: 13px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); cursor: pointer;
+            z-index: 1000; transition: all 0.3s; max-width: 300px;
+        }
+        
+        #coords:hover { background: #1B5B9A; color: white; transform: translateY(-2px); }
+        
+        .popup {
+            background: white; padding: 15px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); min-width: 280px; max-width: 90vw;
+            font-size: 14px; z-index: 1000; text-align: right; direction: rtl;
+            border: 2px solid #1B5B9A;
+        }
+        
+        .popup-title {
+            font-size: 18px; color: #1e293b; margin-bottom: 10px;
+            padding-bottom: 8px; border-bottom: 2px solid #E49112;
+        }
+        
+        .popup-details {
+            margin: 10px 0; font-size: 13px; color: #4b5563;
+            max-height: 200px; overflow-y: auto; padding: 5px;
+        }
+        
+        .popup-detail-item {
+            display: flex; justify-content: space-between;
+            margin-bottom: 5px; padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .details-table {
+            width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; direction: rtl;
+        }
+        
+        .details-table th {
+            background-color: #1B5B9A; color: white; padding: 6px;
+            text-align: right; border: 1px solid #ddd;
+        }
+        
+        .details-table td {
+            padding: 6px; border: 1px solid #ddd; text-align: right;
+        }
+        
+        .details-table tr:nth-child(even) { background-color: #f8f9fa; }
+        
+        .popup-buttons {
+            display: flex; gap: 10px; margin-top: 15px; justify-content: center;
+        }
+        
+        .popup-btn {
+            padding: 8px 16px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        
+        .whatsapp-btn { background: #25D366; color: white; flex: 1; }
+        .whatsapp-btn:hover { background: #128C7E; transform: translateY(-2px); }
+        .email-btn { background: #EA4335; color: white; flex: 1; }
+        .email-btn:hover { background: #C23321; transform: translateY(-2px); }
+        
+        /* لوحة التحكم القابلة للطي */
+        #layerToggle {
+            position: absolute; top: 70px; right: 10px; z-index: 1000;
+        }
+        
+        #layerControl {
+            background: rgba(255,255,255,0.98); padding: 15px;
+            border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            direction: rtl; min-width: 220px; border: 2px solid #1B5B9A;
+            backdrop-filter: blur(10px); transform: translateX(100%);
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            max-height: 70vh; overflow-y: auto;
+        }
+        
+        #layerControl.open { transform: translateX(0); }
+        
+        .layer-toggle-btn {
+            width: 50px; height: 50px; border-radius: 12px 0 0 12px;
+            background: linear-gradient(135deg, #1B5B9A, #E49112); border: none;
+            color: white; font-size: 20px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s; display: flex; align-items: center; justify-content: center;
+        }
+        
+        .layer-toggle-btn:hover { transform: translateX(-5px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        
+        .layer-control-title {
+            font-weight: bold; color: #1B5B9A; margin-bottom: 12px;
+            font-size: 16px; display: flex; align-items: center; gap: 8px;
+            justify-content: space-between;
+        }
+        
+        .layer-item {
+            margin: 8px 0; display: flex; align-items: center;
+            padding: 8px; border-radius: 8px; transition: all 0.2s; font-size: 14px; cursor: pointer;
+        }
+        
+        .layer-item:hover { background: rgba(27, 91, 154, 0.1); transform: translateX(-5px); }
+        
+        .layer-checkbox {
+            margin-left: 12px; width: 20px; height: 20px; accent-color: #1B5B9A;
+            cursor: pointer; transform: scale(1.1);
+        }
+        
+        .layer-label { flex-grow: 1; cursor: pointer; font-weight: 500; }
+        
+        /* 🔍 مربع البحث القابل للطي */
+        #searchToggle {
+            position: absolute; top: 70px; left: 10px; z-index: 1000;
+        }
+        
+        #searchBox {
+            background: rgba(255,255,255,0.98); padding: 0;
+            border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            border: 2px solid #E49112; backdrop-filter: blur(10px);
+            transform: translateX(-100%); transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            min-width: 280px; max-width: 90vw; overflow: hidden;
+        }
+        
+        #searchBox.open { transform: translateX(0); }
+        
+        .search-toggle-btn {
+            width: 50px; height: 50px; border-radius: 0 12px 12px 0;
+            background: linear-gradient(135deg, #E49112, #1B5B9A); border: none;
+            color: white; font-size: 20px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s; display: flex; align-items: center; justify-content: center;
+        }
+        
+        .search-toggle-btn:hover { transform: translateX(5px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        
+        .search-content {
+            padding: 15px; transform: translateX(100%); transition: transform 0.3s ease;
+        }
+        
+        #searchBox.open .search-content { transform: translateX(0); }
+        
+        .search-title {
+            font-weight: bold; color: #E49112; margin-bottom: 12px;
+            font-size: 16px; display: flex; align-items: center; gap: 8px;
+            justify-content: space-between;
+        }
+        
+        .search-close-btn {
+            background: none; border: none; font-size: 18px; color: #E49112;
+            cursor: pointer; padding: 0; width: 25px; height: 25px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        
+        #searchInput {
+            width: 100%; padding: 12px; border: 2px solid #ddd;
+            border-radius: 8px; font-size: 14px; margin-bottom: 12px;
+            outline: none; transition: all 0.3s; box-sizing: border-box;
+        }
+        
+        #searchInput:focus { 
+            border-color: #E49112; box-shadow: 0 0 0 3px rgba(228, 145, 18, 0.1);
+        }
+        
+        #searchButton {
+            width: 100%; padding: 12px; background: linear-gradient(135deg, #E49112, #1B5B9A);
+            color: white; border: none; border-radius: 8px; font-weight: bold;
+            font-size: 14px; cursor: pointer; transition: all 0.3s;
+        }
+        
+        #searchButton:hover { 
+            transform: translateY(-2px); box-shadow: 0 6px 20px rgba(228, 145, 18, 0.4);
+        }
+        
+        #homeButton {
+            position: absolute; top: 70px; left: 50%;
+            transform: translateX(-50%); background: rgba(255,255,255,0.95);
+            width: 50px; height: 50px; border-radius: 50%; border: 2px solid #1B5B9A;
+            font-size: 22px; cursor: pointer; z-index: 1000; display: flex;
+            align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        
+        #homeButton:hover {
+            background: #1B5B9A; color: white; transform: translateX(-50%) scale(1.1);
+        }
+        
+        .tooltip {
+            position: absolute; background: rgba(0,0,0,0.8);
+            color: white; padding: 5px 10px; border-radius: 4px;
+            font-size: 12px; pointer-events: none; z-index: 1000;
+            white-space: nowrap; transform: translate(-50%, -100%); margin-top: -10px;
+        }
+        
+        @media (max-width: 768px) {
+            #header { flex-direction: column; padding: 10px; gap: 5px; }
+            #header-logo { font-size: 20px; }
+            #header-title { font-size: 16px; }
+            #layerControl { min-width: 200px; }
+            #layerToggle { right: 5px; }
+            #searchToggle { left: 5px; }
+            #searchBox { min-width: 260px; }
+            #homeButton { top: 60px; width: 45px; height: 45px; font-size: 18px; }
+            .layer-toggle-btn, .search-toggle-btn { width: 45px; height: 45px; font-size: 18px; }
+            #coords { font-size: 12px; padding: 6px 12px; max-width: 250px; }
+        }
+        
+        @media (max-width: 480px) {
+            #layerControl, #layerToggle { top: 130px; }
+            #searchToggle { top: 130px; }
+            #searchBox { left: 5px; right: 5px; min-width: auto; max-width: none; }
+            #homeButton { top: 115px; }
+        }
+    </style>
+</head>
+<body>
+    <header id="header">
+        <div id="header-logo">🗺️ CadGIS</div>
+        <div id="header-title">Système Cadastre Marocain | Titres Fonciers | Bornes Géodésiques</div>
+    </header>
+    
+    <div id="map"></div>
+    
+    <div id="coords">Coordonnées: -7.58980, 33.57310</div>
+    
+    <!-- لوحة التحكم القابلة للطي -->
+    <div id="layerToggle">
+        <button id="layerToggleBtn" class="layer-toggle-btn" title="Layers">📋</button>
+        <div id="layerControl">
+            <div class="layer-control-title">
+                <span>Layer Control</span>
+                <button onclick="toggleLayerPanel()" class="layer-toggle-btn" 
+                        style="width:40px;height:35px;font-size:16px;border-radius:0 8px 8px 0;transform:none;">✕</button>
+            </div>
+            <div class="layer-item">
+                <label class="layer-label">provinces</label>
+                <input type="checkbox" id="provinceLayer" checked class="layer-checkbox">
+            </div>
+            <div class="layer-item">
+                <label class="layer-label">titres</label>
+                <input type="checkbox" id="titrgeoLayer" checked class="layer-checkbox">
+            </div>
+            <div class="layer-item">
+                <label class="layer-label">Bornes</label>
+                <input type="checkbox" id="geoBornesLayer" checked class="layer-checkbox">
+            </div>
+            <div class="layer-item">
+                <label class="layer-label">basemap</label>
+                <input type="checkbox" id="baseLayer" checked class="layer-checkbox">
+            </div>
+        </div>
+    </div>
+    
+    <!-- 🔍 أيقونة البحث القابلة للطي -->
+    <div id="searchToggle">
+        <button id="searchToggleBtn" class="search-toggle-btn" title="Recherche">🔍</button>
+        <div id="searchBox">
+            <div class="search-content">
+                <div class="search-title">
+                    <span>Recherche OSM</span>
+                    <button id="searchCloseBtn" class="search-close-btn">✕</button>
+                </div>
+                <input type="text" id="searchInput" placeholder="Tapez adresse, ville, province...">
+                <button id="searchButton">Rechercher</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="homeButton" title="Vue complète">🏠</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
+    <script>
+        let map, popup, tooltip, popupEl;
+        let selectedProvince = null, selectedTitrgeo = null, selectedGeoBornes = null;
+        let layers = [];
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            initUI();
+            initInteractions();
+            initLayerToggle();
+            initSearchToggle();
+        });
+        
+        function toggleLayerPanel() {
+            document.getElementById('layerControl').classList.toggle('open');
+        }
+        
+        function toggleSearchPanel() {
+            const searchBox = document.getElementById('searchBox');
+            searchBox.classList.toggle('open');
+        }
+        
+        function initLayerToggle() {
+            document.getElementById('layerToggleBtn').addEventListener('click', toggleLayerPanel);
+        }
+        
+        function initSearchToggle() {
+            document.getElementById('searchToggleBtn').addEventListener('click', toggleSearchPanel);
+            document.getElementById('searchCloseBtn').addEventListener('click', toggleSearchPanel);
+        }
+        
+        // البحث في OpenStreetMap Nominatim
+        async function searchOSM(query) {
+            if (!query.trim()) return;
+            
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10&countrycodes=ma&addressdetails=1`
+                );
+                const data = await response.json();
+                
+                if (data.length > 0) {
+                    const result = data[0];
+                    const lon = parseFloat(result.lon);
+                    const lat = parseFloat(result.lat);
+                    
+                    map.getView().animate({
+                        center: ol.proj.fromLonLat([lon, lat]),
+                        zoom: 15,
+                        duration: 1000
+                    });
+                    
+                    // إضافة علامة مؤقتة
+                    const marker = new ol.layer.Vector({
+                        source: new ol.source.Vector({
+                            features: [new ol.Feature({
+                                geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
+                            })]
+                        }),
+                        style: new ol.style.Style({
+                            image: new ol.style.Circle({
+                                radius: 8,
+                                fill: new ol.style.Fill({color: '#E49112'}),
+                                stroke: new ol.style.Stroke({color: 'white', width: 2})
+                            })
+                        })
+                    });
+                    
+                    map.addLayer(marker);
+                    setTimeout(() => map.removeLayer(marker), 5000);
+                    
+                } else {
+                    alert('Aucun résultat trouvé');
+                }
+            } catch (error) {
+                console.error('Erreur recherche:', error);
+                alert('Erreur de recherche. Vérifiez votre connexion.');
+            }
+        }
+        
+        function initMap() {
+            const baseLayer = new ol.layer.Tile({
+                title: 'basemap',
+                source: new ol.source.XYZ({
+                    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                    maxZoom: 20
+                })
+            });
+            
+            const provinceSource = new ol.source.Vector({
+                url: 'https://raw.githubusercontent.com/jilitelmostafa/decoupage_prov_maroc/refs/heads/main/PROVINCE.geojson.txt',
+                format: new ol.format.GeoJSON()
+            });
+            
+            const titrgeoSource = new ol.source.Vector({
+                url: 'https://raw.githubusercontent.com/jilitelmostafa/decoupage_prov_maroc/refs/heads/main/titrgeo.txt',
+                format: new ol.format.GeoJSON()
+            });
+            
+            const geoBornesSource = new ol.source.Vector({
+                url: 'https://raw.githubusercontent.com/jilitelmostafa/decoupage_prov_maroc/refs/heads/main/geoBornes.txt',
+                format: new ol.format.GeoJSON()
+            });
+            
+            const provinceLayer = new ol.layer.Vector({
+                title: 'provinces',
+                source: provinceSource,
+                style: function(feature) {
+                    const name = feature.get('NOM_PROV') || feature.get('NAME') || feature.get('nom') || '';
+                    const isSelected = feature === selectedProvince;
+                    const isTaroudant = name.toLowerCase().includes('taroudant');
+                    
+                    const fillColor = isSelected ? 'rgba(255, 215, 0, 0.4)' :
+                        (isTaroudant ? 'rgba(0, 200, 83, 0.3)' : 'rgba(30, 144, 255, 0.2)');
+                    
+                    const strokeColor = isSelected ? '#FF5722' :
+                        (isTaroudant ? '#00C853' : '#00FF40');
+                    
+                    return [
+                        new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: strokeColor,
+                                width: isSelected ? 4 : 2
+                            }),
+                            fill: new ol.style.Fill({ color: fillColor })
+                        }),
+                        name && new ol.style.Style({
+                            text: new ol.style.Text({
+                                text: name.length > 20 ? name.substring(0, 20) + '...' : name,
+                                font: isSelected ? 'bold 16px Arial' : 'bold 13px Arial',
+                                fill: new ol.style.Fill({ color: isSelected ? '#FF5722' : '#1B5B9A' }),
+                                stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 255, 0.8)', width: 3 }),
+                                textBaseline: 'middle', textAlign: 'center', offsetY: -15
+                            })
+                        })
+                    ].filter(Boolean);
+                }
+            });
+            
+            const titrgeoLayer = new ol.layer.Vector({
+                title: 'titres',
+                source: titrgeoSource,
+                style: function(feature) {
+                    const name = feature.get('tit_com') || '';
+                    const isSelected = feature === selectedTitrgeo;
+                    
+                    return [
+                        new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: isSelected ? '#FF9800' : '#D32F2F',
+                                width: isSelected ? 4 : 2
+                            }),
+                            fill: new ol.style.Fill({
+                                color: isSelected ? 'rgba(255, 152, 0, 0.3)' : 'rgba(211, 47, 47, 0.1)'
+                            })
+                        }),
+                        name && new ol.style.Style({
+                            text: new ol.style.Text({
+                                text: name.length > 25 ? name.substring(0, 25) + '...' : name,
+                                font: isSelected ? 'bold 14px Arial' : '12px Arial',
+                                fill: new ol.style.Fill({ color: '#FFFFFF' }),
+                                stroke: new ol.style.Stroke({ color: 'rgba(0, 0, 0, 0.7)', width: 2 }),
+                                backgroundFill: new ol.style.Fill({ color: 'rgba(211, 47, 47, 0.7)' }),
+                                padding: [3, 5, 3, 5],
+                                textBaseline: 'middle', textAlign: 'center', offsetY: -12
+                            })
+                        })
+                    ].filter(Boolean);
+                }
+            });
+            
+            const geoBornesLayer = new ol.layer.Vector({
+                title: 'Bornes',
+                source: geoBornesSource,
+                style: function(feature) {
+                    const name = feature.get('name') || feature.get('nom') || '';
+                    const isSelected = feature === selectedGeoBornes;
+                    
+                    return [
+                        new ol.style.Style({
+                            stroke: new ol.style.Stroke({
+                                color: isSelected ? '#9C27B0' : '#303F9F',
+                                width: isSelected ? 4 : 2
+                            }),
+                            fill: new ol.style.Fill({
+                                color: isSelected ? 'rgba(156, 39, 176, 0.3)' : 'rgba(48, 63, 159, 0.15)'
+                            })
+                        }),
+                        name && new ol.style.Style({
+                            text: new ol.style.Text({
+                                text: name.length > 25 ? name.substring(0, 25) + '...' : name,
+                                font: isSelected ? 'bold 14px Arial' : '12px Arial',
+                                fill: new ol.style.Fill({ color: '#303F9F' }),
+                                stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 255, 0.8)', width: 2.5 }),
+                                textBaseline: 'middle', textAlign: 'center', offsetY: -15
+                            })
+                        })
+                    ].filter(Boolean);
+                }
+            });
+            
+            layers = [baseLayer, provinceLayer, titrgeoLayer, geoBornesLayer];
+            
+            map = new ol.Map({
+                target: 'map',
+                layers: layers,
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([-7.5898, 33.5731]),
+                    zoom: 7,
+                    minZoom: 5,
+                    maxZoom: 18
+                })
+            });
+            
+            map.addControl(new ol.control.ScaleLine({
+                units: 'metric',
+                bar: true,
+                steps: 4,
+                text: true,
+                minWidth: 140
+            }));
+        }
+        
+        function initUI() {
+            popupEl = document.createElement('div');
+            popupEl.className = 'popup';
+            popup = new ol.Overlay({
+                element: popupEl,
+                positioning: 'bottom-center',
+                offset: [0, -15],
+                stopEvent: true
+            });
+            map.addOverlay(popup);
+            
+            tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            document.body.appendChild(tooltip);
+            
+            window.requestWhatsapp = function(name) {
+                window.open(`https://wa.me/212668090285?text=Info sur ${name} - CadGIS`, '_blank');
+            };
+            
+            window.requestEmail = function(name) {
+                window.open(`mailto:info@cadgis.ma?subject=Info ${name}&body=Demande info ${name}`, '_blank');
+            };
+        }
+        
+        function initInteractions() {
+            const coordsEl = document.getElementById('coords');
+            const searchInput = document.getElementById('searchInput');
+            const searchButton = document.getElementById('searchButton');
+            const homeButton = document.getElementById('homeButton');
+            
+            document.getElementById('provinceLayer').addEventListener('change', (e) => layers[1].setVisible(e.target.checked));
+            document.getElementById('titrgeoLayer').addEventListener('change', (e) => layers[2].setVisible(e.target.checked));
+            document.getElementById('geoBornesLayer').addEventListener('change', (e) => layers[3].setVisible(e.target.checked));
+            document.getElementById('baseLayer').addEventListener('change', (e) => layers[0].setVisible(e.target.checked));
+            
+            // OpenStreetMap Search
+            searchButton.addEventListener('click', () => searchOSM(searchInput.value.trim()));
+            searchInput.addEventListener('keypress', e => {
+                if (e.key === 'Enter') searchOSM(searchInput.value.trim());
+            });
+            
+            map.on('pointermove', function(evt) {
+                const coord = ol.proj.toLonLat(evt.coordinate);
+                coordsEl.textContent = `Coordonnées: ${coord[0].toFixed(5)}, ${coord[1].toFixed(5)}`;
+                
+                const feature = map.forEachFeatureAtPixel(evt.pixel, ft => ft);
+                if (feature) {
+                    map.getTargetElement().style.cursor = 'pointer';
+                    const name = feature.get('NOM_PROV') || feature.get('tit_com') || feature.get('name') || feature.get('nom') || '';
+                    if (name) {
+                        tooltip.textContent = name.length > 30 ? name.substring(0, 30) + '...' : name;
+                        tooltip.style.left = evt.pixel[0] + 'px';
+                        tooltip.style.top = (evt.pixel[1] - 15) + 'px';
+                        tooltip.style.display = 'block';
+                    }
+                } else {
+                    map.getTargetElement().style.cursor = '';
+                    tooltip.style.display = 'none';
+                }
+            });
+            
+            map.on('click', function(evt) {
+                tooltip.style.display = 'none';
+                const feature = map.forEachFeatureAtPixel(evt.pixel, ft => ft);
+                if (feature) {
+                    clearSelection();
+                    updateSelection(feature);
+                    showFeatureInfo(feature, evt.coordinate);
+                    map.getView().fit(feature.getGeometry().getExtent(), {
+                        duration: 800, padding: [80, 80, 80, 80], maxZoom: 14
+                    });
+                } else {
+                    popup.setPosition(undefined);
+                    clearSelection();
+                }
+            });
+            
+            coordsEl.addEventListener('click', function() {
+                const center = ol.proj.toLonLat(map.getView().getCenter());
+                const coordsText = `${center[0].toFixed(6)}, ${center[1].toFixed(6)}`;
+                navigator.clipboard.writeText(coordsText).then(() => {
+                    const original = coordsEl.textContent;
+                    coordsEl.textContent = 'Copié!';
+                    setTimeout(() => coordsEl.textContent = original, 2000);
+                });
+            });
+            
+            homeButton.addEventListener('click', () => {
+                map.getView().animate({
+                    center: ol.proj.fromLonLat([-7.5898, 33.5731]),
+                    zoom: 7,
+                    duration: 1000
+                });
+                clearSelection();
+                popup.setPosition(undefined);
+            });
+        }
+        
+        function updateSelection(feature) {
+            clearSelection();
+            if (layers[1].getSource().hasFeature(feature)) selectedProvince = feature;
+            else if (layers[2].getSource().hasFeature(feature)) selectedTitrgeo = feature;
+            else if (layers[3].getSource().hasFeature(feature)) selectedGeoBornes = feature;
+            map.render();
+        }
+        
+        function clearSelection() {
+            selectedProvince = selectedTitrgeo = selectedGeoBornes = null;
+            map.render();
+        }
+        
+        function showFeatureInfo(feature, coord) {
+            let name = '', details = {}, isTitrgeo = false;
+            
+            if (layers[1].getSource().hasFeature(feature)) {
+                name = feature.get('NOM_PROV') || feature.get('NAME') || feature.get('nom') || 'Province';
+                details = {
+                    'Type': 'Province/Région',
+                    'Nom': name,
+                    'Code': feature.get('code') || feature.get('COD_PROV') || 'N/A',
+                    'Surface': 'Estimée'
+                };
+            } else if (layers[2].getSource().hasFeature(feature)) {
+                isTitrgeo = true;
+                name = feature.get('tit_com') || 'Titre foncier';
+                const props = feature.getProperties();
+                details = {};
+                for (const [key, value] of Object.entries(props)) {
+                    if (key !== 'geometry' && value !== null && value !== undefined) {
+                        details[key] = value;
+                    }
+                }
+            } else {
+                name = feature.get('name') || feature.get('nom') || 'Borne';
+                details = {
+                    'Type': 'Bornes géodésiques',
+                    'Nom': name,
+                    'Catégorie': feature.get('type') || feature.get('categorie') || 'N/A'
+                };
+            }
+            
+            let detailsHTML;
+            if (isTitrgeo && Object.keys(details).length > 0) {
+                detailsHTML = `
+                    <table class="details-table">
+                        <thead><tr><th>Critère</th><th>Valeur</th></tr></thead>
+                        <tbody>${Object.entries(details).map(([key, value]) => 
+                            `<tr><td><b>${key}</b></td><td>${value}</td></tr>`).join('')}</tbody>
+                    </table>
+                `;
+            } else {
+                detailsHTML = Object.entries(details)
+                    .map(([k, v]) => `<div class="popup-detail-item"><span>${k}:</span> <b>${v}</b></div>`)
+                    .join('');
+            }
+            
+            popupEl.innerHTML = `
+                <div class="popup-title">${name}</div>
+                <div class="popup-details">${detailsHTML}</div>
+                <div class="popup-buttons">
+                    <button class="popup-btn whatsapp-btn" onclick="requestWhatsapp('${name.replace(/'/g, "\\'")}')">📱 WhatsApp</button>
+                    <button class="popup-btn email-btn" onclick="requestEmail('${name.replace(/'/g, "\\'")}')">✉️ Email</button>
+                </div>
+            `;
+            popup.setPosition(coord);
+        }
+    </script>
+</body>
+</html>
